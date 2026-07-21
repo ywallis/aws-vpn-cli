@@ -1,0 +1,16 @@
+# Build artifacts (regenerate with ./build.sh)
+/openvpn-*.tar.gz
+/openvpn-2*/
+/openvpn
+
+# Compiled binary is machine-specific (linked to system OpenSSL); rebuild locally
+*.log
+
+# Transient + sensitive: captured SAML assertion, deleted after each connect
+saml-response.txt
+
+# Real endpoint config (CA chain etc.) — use vpn.conf.example as the template
+vpn.conf
+
+# Real endpoint settings (host/port/proto) — use vpn.env.example as the template
+vpn.env

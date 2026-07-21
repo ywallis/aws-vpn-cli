@@ -1,0 +1,25 @@
+# Template for vpn.conf (the real vpn.conf is gitignored).
+# Derive it from your AWS Client VPN .ovpn profile, dropping the lines the
+# wrapper handles on the CLI:
+#   remote / remote-random-hostname / auth-user-pass / auth-federate / auth-retry
+#
+#   grep -vE '^(remote |remote-random-hostname|auth-user-pass|auth-federate|auth-retry )' \
+#       downloaded-client-config.ovpn > vpn.conf
+client
+dev tun
+proto udp
+resolv-retry infinite
+nobind
+remote-cert-tls server
+cipher AES-256-GCM
+verb 3
+<ca>
+-----BEGIN CERTIFICATE-----
+... paste your endpoint's CA chain here ...
+-----END CERTIFICATE-----
+</ca>
+
+auth-nocache
+reneg-sec 0
+
+verify-x509-name *.example.com name
