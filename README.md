@@ -67,3 +67,35 @@ cert chain verifies fine against OpenSSL 3.5.
 
 `aws-connect.sh` runs the final `openvpn` with `sudo` (needed to create the tun
 device and routes).
+
+## Keeping it running (tmux)
+
+`openvpn` runs in the foreground, so it dies when its SSH session closes. The
+`-L` forward is only needed for the login moment, but the `openvpn` *process*
+must outlive your SSH session. Run it inside a tmux session **on the box** (a
+tmux on your laptop would not help — the remote process is still tied to the
+SSH session):
+
+```sh
+# from your laptop, SSH in WITH the callback forward:
+ssh -L 35001:localhost:35001 <user>@<this-box>
+
+# on the box:
+tmux new -s vpn
+./aws-connect.sh
+# authenticate in your laptop browser; wait for "Initialization Sequence Completed"
+# then detach:  Ctrl-b  d
+```
+
+The tmux server on the box is a daemon with no controlling terminal, so
+`openvpn` survives once detached. You can now drop the `-L` forward and close
+SSH — the VPN stays up. To manage it later:
+
+```sh
+tmux attach -t vpn        # view status; Ctrl-C inside disconnects the VPN
+tmux kill-session -t vpn  # disconnect and tear down
+```
+
+Note: SAML requires interactive auth on every connect (the assertion is
+single-use), so this is start-on-demand — there is no unattended auto-connect
+or auto-reconnect.
