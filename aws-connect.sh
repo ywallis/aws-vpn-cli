@@ -30,7 +30,10 @@ wait_file() {
   [ -f "$f" ]
 }
 
-cleanup() { [ -n "${LPID:-}" ] && kill "$LPID" 2>/dev/null || true; }
+cleanup() {
+  [ -n "${LPID:-}" ] && kill "$LPID" 2>/dev/null || true
+  [ -n "${AUTH_FILE:-}" ] && rm -f "$AUTH_FILE" || true
+}
 trap cleanup EXIT
 
 rm -f "$SAML_FILE"
@@ -85,9 +88,17 @@ fi
 echo ">> SAML response captured."
 
 echo ">> Phase 2: connecting (sudo) ..."
+# Credentials go in a private temp file, NOT bash process substitution:
+# sudo closes inherited file descriptors, so a <(...) /dev/fd path is gone
+# before openvpn reads it. A file also keeps the SAML assertion out of argv.
+AUTH_FILE="$(mktemp "$HERE/.auth.XXXXXX")"
+chmod 600 "$AUTH_FILE"
+printf '%s\n%s\n' 'N/A' "CRV1::${VPN_SID}::$(cat "$SAML_FILE")" > "$AUTH_FILE"
+
 sudo "$OVPN_BIN" --config "$OVPN_CONF" --verb 3 \
   --auth-nocache --inactive 3600 \
   --proto "$PROTO" --remote "$SRV" "$PORT" \
   --script-security 2 \
   --route-up "/usr/bin/env rm -f $SAML_FILE" \
-  --auth-user-pass <(printf '%s\n%s\n' 'N/A' "CRV1::${VPN_SID}::$(cat "$SAML_FILE")")
+  --up "$HERE/vpn-updown.sh" --down "$HERE/vpn-updown.sh" --down-pre \
+  --auth-user-pass "$AUTH_FILE"
