@@ -1,4 +1,4 @@
-# aws-vpn-client (headless)
+# aws-vpn-cli (headless)
 
 Connect a headless box to an AWS Client VPN endpoint that uses **SAML**
 authentication. The official AWS VPN Client is GUI-only and needs a local
@@ -7,8 +7,8 @@ the SAML step through an SSH-forwarded callback so no browser is needed *on the
 box*.
 
 Derived from [samm-git/aws-vpn-client](https://github.com/samm-git/aws-vpn-client)
-(see `README.upstream.md` and `LICENSE`). The Go callback server is replaced by
-a Python one, and the connect script is adapted for headless use.
+(MIT — see `LICENSE`). The Go callback server is replaced by a Python one, and
+the connect script is adapted for headless use.
 
 ## Contents
 
@@ -18,6 +18,7 @@ a Python one, and the connect script is adapted for headless use.
 | `openvpn-v2.6.12-aws.patch` | Buffer-size patch so the multi-KB SAMLResponse isn't truncated |
 | `saml_server.py` | Listens on `127.0.0.1:35001`, captures the POSTed `SAMLResponse` |
 | `aws-connect.sh` | Connect wrapper: fetch SAML URL → wait for auth → bring up tunnel |
+| `vpn-updown.sh` | openvpn up/down hook: apply pushed DNS to systemd-resolved, revert on disconnect |
 | `vpn.conf.example` | Template for `vpn.conf` (endpoint CA chain + `verify-x509-name`) |
 | `vpn.env.example` | Template for `vpn.env` (endpoint host / port / proto) |
 
