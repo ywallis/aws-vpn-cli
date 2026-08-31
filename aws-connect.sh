@@ -87,18 +87,25 @@ if ! wait_file "$SAML_FILE" 180; then
 fi
 echo ">> SAML response captured."
 
-echo ">> Phase 2: connecting (sudo) ..."
+echo ">> Phase 2: connecting ..."
 # Credentials go in a private temp file, NOT bash process substitution:
 # sudo closes inherited file descriptors, so a <(...) /dev/fd path is gone
 # before openvpn reads it. A file also keeps the SAML assertion out of argv.
 AUTH_FILE="$(mktemp "$HERE/.auth.XXXXXX")"
 chmod 600 "$AUTH_FILE"
 printf '%s\n%s\n' 'N/A' "CRV1::${VPN_SID}::$(cat "$SAML_FILE")" > "$AUTH_FILE"
+rm -f "$SAML_FILE"   # single-use assertion; already copied into AUTH_FILE
 
-sudo "$OVPN_BIN" --config "$OVPN_CONF" --verb 3 \
-  --auth-nocache --inactive 3600 \
-  --proto "$PROTO" --remote "$SRV" "$PORT" \
-  --script-security 2 \
-  --route-up "/usr/bin/env rm -f $SAML_FILE" \
-  --up "$HERE/vpn-updown.sh" --down "$HERE/vpn-updown.sh" --down-pre \
-  --auth-user-pass "$AUTH_FILE"
+# Prefer the root-owned helper installed by install-nopasswd.sh: its sudoers
+# rule is passwordless, so no prompt. Otherwise fall back to plain sudo.
+PHASE2="/usr/local/lib/aws-vpn/vpn-phase2.sh"
+if [ -x "$PHASE2" ] && sudo -n -l "$PHASE2" >/dev/null 2>&1; then
+  sudo -n "$PHASE2" "$SRV" "$PORT" "$PROTO" "$AUTH_FILE"
+else
+  sudo "$OVPN_BIN" --config "$OVPN_CONF" --verb 3 \
+    --auth-nocache --inactive 3600 \
+    --proto "$PROTO" --remote "$SRV" "$PORT" \
+    --script-security 2 \
+    --up "$HERE/vpn-updown.sh" --down "$HERE/vpn-updown.sh" --down-pre \
+    --auth-user-pass "$AUTH_FILE"
+fi

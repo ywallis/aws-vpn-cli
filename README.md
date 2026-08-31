@@ -19,6 +19,8 @@ the connect script is adapted for headless use.
 | `saml_server.py` | Listens on `127.0.0.1:35001`, captures the POSTed `SAMLResponse` |
 | `aws-connect.sh` | Connect wrapper: fetch SAML URL → wait for auth → bring up tunnel |
 | `vpn-updown.sh` | openvpn up/down hook: apply pushed DNS to systemd-resolved, revert on disconnect |
+| `vpn-phase2.sh` | Root-side connect step, argument-validated; target of the optional NOPASSWD rule |
+| `install-nopasswd.sh` | One-time sudo installer for passwordless activation (see below) |
 | `vpn.conf.example` | Template for `vpn.conf` (endpoint CA chain + `verify-x509-name`) |
 | `vpn.env.example` | Template for `vpn.env` (endpoint host / port / proto) |
 
@@ -67,7 +69,38 @@ cert chain verifies fine against OpenSSL 3.5.
    finishes bringing up the tunnel. It holds the foreground; `Ctrl-C` disconnects.
 
 `aws-connect.sh` runs the final `openvpn` with `sudo` (needed to create the tun
-device and routes).
+device and routes). By default that prompts for your password; see the next
+section to make it passwordless.
+
+## Passwordless activation (optional)
+
+To connect without typing a sudo password — without loosening anything
+machine-wide — install a root-owned copy of the privileged pieces plus a
+sudoers rule scoped to exactly one script:
+
+```sh
+sudo ./install-nopasswd.sh
+```
+
+This creates two things, and nothing else:
+
+- `/usr/local/lib/aws-vpn/` — root-owned copies of `openvpn`, `vpn.conf`,
+  `vpn-updown.sh` and `vpn-phase2.sh`. Because your user can't modify these,
+  the passwordless rule can't be leveraged to run arbitrary code as root.
+- `/etc/sudoers.d/aws-vpn` — allows *your user only* to run
+  `/usr/local/lib/aws-vpn/vpn-phase2.sh` (and nothing else) via sudo without a
+  password. `vpn-phase2.sh` validates its few runtime arguments (server IP,
+  port, proto, auth file) before exec'ing the installed openvpn.
+
+`aws-connect.sh` automatically uses the installed helper when the rule is
+present, and falls back to plain `sudo` (with password prompt) when it isn't.
+
+Because the *installed* copies are what run, re-run `sudo ./install-nopasswd.sh`
+after rebuilding `openvpn` or editing `vpn.conf`. To undo everything:
+
+```sh
+sudo ./install-nopasswd.sh --uninstall
+```
 
 ## Keeping it running (tmux)
 
