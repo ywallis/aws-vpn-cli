@@ -30,6 +30,18 @@ wait_file() {
   [ -f "$f" ]
 }
 
+# Best-effort copy to the LAPTOP clipboard. Inside tmux, load-buffer -w has
+# tmux forward it to the outer terminal (tmux >= 3.2); otherwise emit OSC 52
+# straight to the tty. Either way the terminal on the laptop end must support
+# OSC 52 — if it doesn't, this is a silent no-op.
+copy_to_clipboard() {
+  if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
+    printf '%s' "$1" | tmux load-buffer -w - 2>/dev/null || true
+  elif [ -t 1 ] || [ -w /dev/tty ]; then
+    printf '\033]52;c;%s\007' "$(printf '%s' "$1" | base64 -w0)" > /dev/tty 2>/dev/null || true
+  fi
+}
+
 cleanup() {
   [ -n "${LPID:-}" ] && kill "$LPID" 2>/dev/null || true
   [ -n "${AUTH_FILE:-}" ] && rm -f "$AUTH_FILE" || true
@@ -62,21 +74,29 @@ URL="$(printf '%s' "$OVPN_OUT" | grep -Eo 'https://[^[:space:]]+')"
 [ -n "$URL" ] || { echo "ERROR: could not parse SAML URL" >&2; exit 1; }
 [ -n "$VPN_SID" ] || { echo "ERROR: could not parse VPN session id" >&2; exit 1; }
 
-# Start the callback listener BEFORE handing the user the URL.
-python3 "$LISTENER" &
+# Start the callback listener BEFORE handing the user the URL. It also gets
+# the URL so a GET on / redirects the laptop browser to the IdP.
+python3 "$LISTENER" "$URL" &
 LPID=$!
 sleep 1
+
+copy_to_clipboard "$URL"
 
 cat <<EOF
 
 ============================================================================
-  Open this URL in your LAPTOP browser (SSH tunnel must be up:
+  Authenticate in your LAPTOP browser (SSH tunnel must be up:
     ssh -L 35001:localhost:35001 ${USER}@$(hostname -I | awk '{print $1}') )
+
+  Easiest: open  http://localhost:35001  — it redirects to the IdP login.
+
+  The full URL (also copied to your clipboard if your terminal supports
+  OSC 52):
 
 $URL
 
-  Authenticate with your IdP. The browser will redirect to
-  127.0.0.1:35001 and this script will continue automatically.
+  After signing in, the browser redirects back to 127.0.0.1:35001 and this
+  script continues automatically.
 ============================================================================
 
 EOF

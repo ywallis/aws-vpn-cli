@@ -16,7 +16,7 @@ the connect script is adapted for headless use.
 |------|---------|
 | `build.sh` | Build the patched OpenVPN 2.6.12 binary → `./openvpn` |
 | `openvpn-v2.6.12-aws.patch` | Buffer-size patch so the multi-KB SAMLResponse isn't truncated |
-| `saml_server.py` | Listens on `127.0.0.1:35001`, captures the POSTed `SAMLResponse` |
+| `saml_server.py` | Listens on `127.0.0.1:35001`: `GET /` redirects to the IdP, then captures the POSTed `SAMLResponse` |
 | `aws-connect.sh` | Connect wrapper: fetch SAML URL → wait for auth → bring up tunnel |
 | `vpn-updown.sh` | openvpn up/down hook: apply pushed DNS to systemd-resolved, revert on disconnect |
 | `vpn-phase2.sh` | Root-side connect step, argument-validated; target of the optional NOPASSWD rule |
@@ -64,9 +64,26 @@ cert chain verifies fine against OpenSSL 3.5.
    ```sh
    ./aws-connect.sh
    ```
-3. Open the printed URL in your **laptop** browser and authenticate. The IdP
-   redirect returns to `127.0.0.1:35001` (tunneled to the box) and the script
-   finishes bringing up the tunnel. It holds the foreground; `Ctrl-C` disconnects.
+3. In your **laptop** browser, open <http://localhost:35001> — the listener
+   302-redirects to your IdP's sign-in page, so this address is bookmarkable
+   and never changes. (The one-time SAML URL is also printed, and copied to
+   your laptop clipboard when your terminal supports OSC 52 — see below.)
+   After you authenticate, the IdP redirect returns to `127.0.0.1:35001`
+   (tunneled to the box) and the script finishes bringing up the tunnel. It
+   holds the foreground; `Ctrl-C` disconnects.
+
+### Clipboard over SSH (OSC 52)
+
+The script emits the SAML URL as an OSC 52 escape sequence, which most modern
+terminals (iTerm2, kitty, WezTerm, Alacritty, Ghostty, Windows Terminal, foot)
+translate into a write to the **local** clipboard — it works across SSH because
+it is just terminal output. Unsupported terminals ignore it silently.
+
+Inside tmux the script uses `tmux load-buffer -w` (tmux ≥ 3.2) instead, which
+both fills tmux's paste buffer and asks the outer terminal to set the
+clipboard. If the clipboard doesn't update, check the outer terminal supports
+OSC 52 (some, like older GNOME Terminal, don't) — the tmux paste buffer
+(`prefix ]`) still has the URL either way.
 
 `aws-connect.sh` runs the final `openvpn` with `sudo` (needed to create the tun
 device and routes). By default that prompts for your password; see the next

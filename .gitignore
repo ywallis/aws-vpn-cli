@@ -15,3 +15,6 @@ vpn.conf
 
 # Real endpoint settings (host/port/proto) — use vpn.env.example as the template
 vpn.env
+
+# Python bytecode cache (saml_server.py)
+__pycache__/

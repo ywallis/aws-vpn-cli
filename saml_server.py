@@ -6,6 +6,10 @@ URL-encodes it and writes it to saml-response.txt (mode 0600), then exits.
 
 The AWS VPN SAML flow always redirects to http://127.0.0.1:35001/ with the
 assertion in a POST form field named "SAMLResponse".
+
+If the SAML redirect URL is passed as argv[1], a browser GET on / is answered
+with a 302 to it — so with the SSH forward up, opening http://localhost:35001
+on the laptop starts the IdP login without copy-pasting the URL.
 """
 import os
 import sys
@@ -42,6 +46,12 @@ class SAMLHandler(BaseHTTPRequestHandler):
         self.server._got_response = True
 
     def do_GET(self):
+        url = getattr(self.server, "_saml_url", None)
+        if url and self.path == "/":
+            self.send_response(302)
+            self.send_header("Location", url)
+            self.end_headers()
+            return
         self._reply(405, "POST expected (this is the AWS VPN SAML callback listener)\n")
 
     def log_message(self, *args):
@@ -51,6 +61,7 @@ class SAMLHandler(BaseHTTPRequestHandler):
 def main():
     httpd = HTTPServer((HOST, PORT), SAMLHandler)
     httpd._got_response = False
+    httpd._saml_url = sys.argv[1] if len(sys.argv) > 1 else None
     print("SAML listener ready on http://%s:%d" % (HOST, PORT), file=sys.stderr)
     while not httpd._got_response:
         httpd.handle_request()
