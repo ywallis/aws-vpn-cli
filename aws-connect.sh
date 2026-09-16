@@ -62,9 +62,22 @@ trap cleanup EXIT
 rm -f "$SAML_FILE"
 # The EXIT trap covers Ctrl-C and a closing SSH session, but not SIGKILL or a
 # reboot while the tunnel is up -- and a missed cleanup leaves the captured SAML
-# assertion in .auth.* on disk. Sweep what earlier runs orphaned; the age guard
-# keeps this from touching a concurrent run's live file.
-find "$HERE" -maxdepth 1 -name '.auth.*' -mmin +60 -delete 2>/dev/null || true
+# assertion in .auth.* on disk. Sweep what earlier runs orphaned, skipping any
+# file a running process still names: openvpn keeps the path in its argv for the
+# life of the connection, which can be days, so file age is not a safe proxy for
+# "nobody is using this".
+sweep_orphaned_auth_files() {
+  local referenced f n=0
+  referenced="$(cat /proc/[0-9]*/cmdline 2>/dev/null | tr '\0' '\n' | grep -F "$HERE/.auth." || true)"
+  for f in "$HERE"/.auth.*; do
+    [ -e "$f" ] || continue
+    if ! printf '%s\n' "$referenced" | grep -qxF "$f"; then
+      rm -f "$f" && n=$((n+1))
+    fi
+  done
+  [ "$n" -eq 0 ] || echo ">> swept $n orphaned SAML assertion file(s)"
+}
+sweep_orphaned_auth_files
 
 # AWS keeps a session pinned to one gateway IP, so resolve a random-prefixed
 # hostname once and reuse that exact IP for both phases.
