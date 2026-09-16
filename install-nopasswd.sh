@@ -10,8 +10,8 @@
 #   sudo ./install-nopasswd.sh              # install / refresh
 #   sudo ./install-nopasswd.sh --uninstall  # remove everything it added
 #
-# Re-run after ./build.sh or after editing vpn.conf — the installed copies are
-# what actually run.
+# Re-run after rebuilding openvpn or editing vpn.conf — the installed copies
+# are what actually run. ./setup.sh does this for you.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,7 +33,7 @@ fi
   exit 1
 }
 
-[ -x "$HERE/openvpn" ]  || { echo "ERROR: $HERE/openvpn missing — run ./build.sh first" >&2; exit 1; }
+[ -x "$HERE/openvpn" ]  || { echo "ERROR: $HERE/openvpn missing — run ./setup.sh first" >&2; exit 1; }
 [ -f "$HERE/vpn.conf" ] || { echo "ERROR: $HERE/vpn.conf missing — copy vpn.conf.example first" >&2; exit 1; }
 
 install -d -o root -g root -m 755 "$DEST"

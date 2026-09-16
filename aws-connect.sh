@@ -42,6 +42,17 @@ copy_to_clipboard() {
   fi
 }
 
+# Resolve an A record without requiring dig: bind9-dnsutils isn't installed on
+# Ubuntu Server/cloud images, and getent is part of libc so it's always there.
+resolve_a() {
+  local name="$1" ip=""
+  if command -v dig >/dev/null 2>&1; then
+    ip="$(dig +short A "$name" | grep -E '^[0-9.]+$' | head -n1)"
+  fi
+  [ -n "$ip" ] || ip="$(getent ahostsv4 "$name" | awk '{print $1; exit}')"
+  printf '%s' "$ip"
+}
+
 cleanup() {
   [ -n "${LPID:-}" ] && kill "$LPID" 2>/dev/null || true
   [ -n "${AUTH_FILE:-}" ] && rm -f "$AUTH_FILE" || true
@@ -49,11 +60,16 @@ cleanup() {
 trap cleanup EXIT
 
 rm -f "$SAML_FILE"
+# The EXIT trap covers Ctrl-C and a closing SSH session, but not SIGKILL or a
+# reboot while the tunnel is up -- and a missed cleanup leaves the captured SAML
+# assertion in .auth.* on disk. Sweep what earlier runs orphaned; the age guard
+# keeps this from touching a concurrent run's live file.
+find "$HERE" -maxdepth 1 -name '.auth.*' -mmin +60 -delete 2>/dev/null || true
 
 # AWS keeps a session pinned to one gateway IP, so resolve a random-prefixed
 # hostname once and reuse that exact IP for both phases.
 RAND="$(openssl rand -hex 12)"
-SRV="$(dig +short A "${RAND}.${VPN_HOST}" | grep -E '^[0-9.]+$' | head -n1)"
+SRV="$(resolve_a "${RAND}.${VPN_HOST}")"
 [ -n "$SRV" ] || { echo "ERROR: could not resolve ${VPN_HOST}" >&2; exit 1; }
 echo ">> endpoint ${VPN_HOST} -> ${SRV}:${PORT}/${PROTO}"
 

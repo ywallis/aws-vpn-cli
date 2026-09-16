@@ -1,7 +1,10 @@
-# Build artifacts (regenerate with ./build.sh)
+# Build artifacts (regenerate with ./setup.sh)
 /openvpn-*.tar.gz
 /openvpn-2*/
 /openvpn
+
+# Records what ./openvpn was built from, so setup.sh knows when to rebuild
+/.build-stamp
 
 # Compiled binary is machine-specific (linked to system OpenSSL); rebuild locally
 *.log
@@ -15,6 +18,10 @@ vpn.conf
 
 # Real endpoint settings (host/port/proto) — use vpn.env.example as the template
 vpn.env
+
+# Copies setup.sh keeps when it regenerates the two files above
+vpn.conf.bak
+vpn.env.bak
 
 # Python bytecode cache (saml_server.py)
 __pycache__/

@@ -14,7 +14,7 @@ the connect script is adapted for headless use.
 
 | File | Purpose |
 |------|---------|
-| `build.sh` | Build the patched OpenVPN 2.6.12 binary → `./openvpn` |
+| `setup.sh` | Everything: dependency check → import `.ovpn` → build patched OpenVPN → optional passwordless rule |
 | `openvpn-v2.6.12-aws.patch` | Buffer-size patch so the multi-KB SAMLResponse isn't truncated |
 | `saml_server.py` | Listens on `127.0.0.1:35001`: `GET /` redirects to the IdP, then captures the POSTed `SAMLResponse` |
 | `aws-connect.sh` | Connect wrapper: fetch SAML URL → wait for auth → bring up tunnel |
@@ -25,34 +25,54 @@ the connect script is adapted for headless use.
 | `vpn.env.example` | Template for `vpn.env` (endpoint host / port / proto) |
 
 Endpoint-specific files (`vpn.conf`, `vpn.env`) and the machine-specific
-`openvpn` binary are **not** committed — copy the `.example` files and run
-`./build.sh`.
+`openvpn` binary are **not** committed — `./setup.sh` generates all three.
 
 ## Setup
 
+Download your AWS Client VPN profile (the `.ovpn` file) from the AWS console,
+then, on a fresh Ubuntu/Debian box:
+
 ```sh
-# 1. build the patched openvpn (one time)
+git clone <this-repo> && cd aws-vpn-cli
+./setup.sh ~/Downloads/downloaded-client-config.ovpn
+```
+
+That checks dependencies (offering to `apt-get` what's missing), derives
+`vpn.conf` and `vpn.env` from the profile, builds the patched openvpn, and
+offers to set up [passwordless activation](#passwordless-activation-optional).
+
+It is idempotent, so re-running is safe and cheap — the build is skipped unless
+the openvpn version or the patch actually changed:
+
+```sh
+./setup.sh                 # re-check deps / rebuild if stale, keep current config
+./setup.sh new-profile.ovpn  # switch endpoints (the old vpn.conf/env are kept as .bak)
+./setup.sh --rebuild       # force a rebuild
+./setup.sh -y profile.ovpn # non-interactive: apt + sudo install without prompting
+```
+
+### What it needs, if you'd rather check by hand
+
+```sh
 sudo apt-get install -y build-essential pkg-config \
-  libssl-dev liblzo2-dev liblz4-dev libpam0g-dev
-./build.sh
-
-# 2. provide your endpoint
-cp vpn.env.example  vpn.env      # set VPN_HOST / PORT / PROTO
-cp vpn.conf.example vpn.conf     # paste your endpoint's CA chain + x509 name
+  libssl-dev liblzo2-dev libcap-ng-dev
 ```
 
-`vpn.conf` is derived from your AWS `.ovpn` profile, dropping the lines the
-wrapper handles on the CLI:
+`libcap-ng-dev` is not optional — openvpn's `configure` hard-errors without it
+on Linux, and nothing in `build-essential` pulls it in.
 
-```sh
-grep -vE '^(remote |remote-random-hostname|auth-user-pass|auth-federate|auth-retry )' \
-    downloaded-client-config.ovpn > vpn.conf
-```
+`dig` is used to resolve the endpoint when present, but is **not** required: it
+lives in `bind9-dnsutils`, which isn't installed on Ubuntu Server and cloud
+images, so `aws-connect.sh` falls back to `getent`.
 
-Notes for Ubuntu 26.04 / OpenSSL 3.5: build with `--disable-dco` (in-kernel
-`ovpn` headers collide with the vendored ones) — handled in `build.sh`. The
-OpenSSL self-signed-cert patch shipped upstream is **not** needed here; the AWS
-cert chain verifies fine against OpenSSL 3.5.
+Notes for Ubuntu 26.04 / OpenSSL 3.5: the build passes `--disable-dco` (in-kernel
+`ovpn` headers collide with the vendored ones). The OpenSSL self-signed-cert
+patch shipped upstream is **not** needed here; the AWS cert chain verifies fine
+against OpenSSL 3.5.
+
+Bumping to a newer openvpn means dropping in a matching
+`openvpn-v<version>-aws.patch` and changing the `VER=` line at the top of
+`setup.sh`.
 
 ## Connect
 
@@ -93,7 +113,8 @@ section to make it passwordless.
 
 To connect without typing a sudo password — without loosening anything
 machine-wide — install a root-owned copy of the privileged pieces plus a
-sudoers rule scoped to exactly one script:
+sudoers rule scoped to exactly one script. `setup.sh` offers this at the end;
+to do it separately:
 
 ```sh
 sudo ./install-nopasswd.sh
@@ -113,7 +134,8 @@ This creates two things, and nothing else:
 present, and falls back to plain `sudo` (with password prompt) when it isn't.
 
 Because the *installed* copies are what run, re-run `sudo ./install-nopasswd.sh`
-after rebuilding `openvpn` or editing `vpn.conf`. To undo everything:
+after rebuilding `openvpn` or editing `vpn.conf` — `./setup.sh` does this for
+you whenever it rebuilt or regenerated either one. To undo everything:
 
 ```sh
 sudo ./install-nopasswd.sh --uninstall
