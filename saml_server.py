@@ -59,14 +59,22 @@ class SAMLHandler(BaseHTTPRequestHandler):
 
 
 def main():
-    httpd = HTTPServer((HOST, PORT), SAMLHandler)
+    try:
+        httpd = HTTPServer((HOST, PORT), SAMLHandler)
+    except OSError as e:
+        # Almost always EADDRINUSE from a listener left over by an earlier run.
+        # A traceback here is useless noise; say what to do instead.
+        print("ERROR: cannot listen on %s:%d (%s)" % (HOST, PORT, e.strerror), file=sys.stderr)
+        print("Find what holds the port with:  ss -ltnp | grep %d" % PORT, file=sys.stderr)
+        return 1
     httpd._got_response = False
     httpd._saml_url = sys.argv[1] if len(sys.argv) > 1 else None
     print("SAML listener ready on http://%s:%d" % (HOST, PORT), file=sys.stderr)
     while not httpd._got_response:
         httpd.handle_request()
     print("SAML response captured; listener shutting down.", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

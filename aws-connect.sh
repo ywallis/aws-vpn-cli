@@ -96,6 +96,20 @@ python3 "$LISTENER" "$URL" &
 LPID=$!
 sleep 1
 
+# If the port is taken, saml_server.py exits here with its own message and the
+# 180s wait below would otherwise time out for no reason. kill -0 can succeed on
+# a child that exited but hasn't been reaped, so ask /proc for the real state.
+listener_alive() {
+  case "$(awk '{print $3}' "/proc/$1/stat" 2>/dev/null)" in
+    ""|Z) return 1 ;;
+    *)    return 0 ;;
+  esac
+}
+listener_alive "$LPID" || {
+  echo "ERROR: SAML listener failed to start (see its message above)" >&2
+  exit 1
+}
+
 copy_to_clipboard "$URL"
 
 cat <<EOF
